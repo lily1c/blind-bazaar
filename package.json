@@ -1,0 +1,14 @@
+{
+  "name": "blind-bazaar-person-a",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Blind Bazaar - agents, negotiation loop, and frontend (Person A side)",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2"
+  }
+}
