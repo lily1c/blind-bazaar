@@ -1,0 +1,31 @@
+pragma language_version 0.26.0;
+import CompactStandardLibrary;
+
+export ledger dealCount: Counter;
+export ledger lastDealValid: Boolean;
+
+witness advertiserMaxCPM(): Uint<64>;
+witness publisherFloorCPM(): Uint<64>;
+witness actualQuality(): Uint<64>;
+
+export circuit verifyCredential(credentialProof: Bytes<32>): Boolean {
+  return credentialProof != pad(32, "");
+}
+
+export circuit verifyDealFairness(
+  price: Uint<64>
+): Boolean {
+  const maxCPM = advertiserMaxCPM();
+  const floorCPM = publisherFloorCPM();
+  const fair = disclose(price <= maxCPM && price >= floorCPM);
+  lastDealValid = fair;
+  dealCount.increment(1);
+  return fair;
+}
+
+export circuit verifyDelivery(
+  promisedQuality: Uint<64>
+): Boolean {
+  const actual = actualQuality();
+  return disclose(actual >= promisedQuality);
+}
