@@ -1,8 +1,14 @@
-pragma language_version 0.26.0;
+pragma language_version 0.23;
 import CompactStandardLibrary;
 
 export ledger dealCount: Counter;
 export ledger lastDealValid: Boolean;
+export ledger lastDeliveryValid: Boolean;
+
+constructor() {
+  lastDealValid = false;
+  lastDeliveryValid = false;
+}
 
 witness advertiserMaxCPM(): Uint<64>;
 witness publisherFloorCPM(): Uint<64>;
@@ -27,5 +33,7 @@ export circuit verifyDelivery(
   promisedQuality: Uint<64>
 ): Boolean {
   const actual = actualQuality();
-  return disclose(actual >= promisedQuality);
+  const delivered = disclose(actual >= promisedQuality);
+  lastDeliveryValid = delivered;
+  return delivered;
 }

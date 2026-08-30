@@ -13,6 +13,7 @@ const chatName = document.getElementById('chat-name');
 const groupAvatarStack = document.getElementById('group-avatar-stack');
 const liveDot = document.getElementById('live-dot');
 const midnightResults = document.getElementById('midnight-results');
+const mnFlow = document.getElementById('mn-flow');
 const modesEl = document.getElementById('modes');
 const progressBar = document.getElementById('progress-bar');
 const briefInput = document.getElementById('campaign-brief');
@@ -91,6 +92,7 @@ async function runAuction() {
   activityEmpty.style.display = 'none';
   earnedTotals = {};
   dealClosedForThread = false;
+  setFlowState('idle');
 
   const logLines = [];
   const brief = briefInput.value.trim();
@@ -207,6 +209,8 @@ function handleEvent(event, logLines, buyerId) {
 
     if (values.deal) {
       dealClosedForThread = true;
+      showMidnightPending(event.sellerId);
+      setFlowState('active');
     } else if (currentThread) {
       const nextSpeaker = role === 'buyer' ? currentThread.sellerId : currentThread.buyerId;
       const nextRole = role === 'buyer' ? 'seller' : 'buyer';
@@ -216,7 +220,9 @@ function handleEvent(event, logLines, buyerId) {
 
   if (event.type === 'proof') {
     removeTyping();
+    removeMidnightPending(event.sellerId);
     renderProof(event);
+    setFlowState(event.verification?.valid ? 'success' : 'error');
 
     if (event.verification?.valid) {
       earnedTotals[event.sellerId] = (earnedTotals[event.sellerId] || 0) + MICROPAYMENT;
@@ -231,6 +237,10 @@ function handleEvent(event, logLines, buyerId) {
         ? `[${event.sellerId}] ${event.verification.valid ? 'VALID' : 'INVALID'} \u2014 price ${event.agreedPrice}, quality ${event.agreedQuality}`
         : `[${event.sellerId}] no deal reached`
     );
+  }
+
+  if (event.type === 'midnight-progress') {
+    updateMidnightPending(event.sellerId, event.progress?.message);
   }
 
   if (event.type === 'error') {
@@ -323,7 +333,21 @@ function updateEarnedBadge(sellerId) {
   badge.textContent = `+$${earnedTotals[sellerId].toFixed(2)} earned`;
 }
 
-/* ---------- Proof cards ---------- */
+/* ---------- Proof cards: real Midnight verification panel ---------- */
+
+function truncateHash(hash) {
+  if (!hash || hash.length < 14) return hash || '\u2014';
+  return `${hash.slice(0, 6)}\u2026${hash.slice(-6)}`;
+}
+
+function checkRow(label, ok) {
+  return `<div class="mn-check-row"><span>${label}</span><span class="mn-check ${ok ? 'ok' : 'no'}">${ok ? '\u2713' : '\u2717'}</span></div>`;
+}
+
+function hashRow(label, hash) {
+  if (!hash) return '';
+  return `<div class="mn-hash-row"><span>${label}</span><code class="mn-hash" title="${hash}">${truncateHash(hash)}</code></div>`;
+}
 
 function renderProof(event) {
   const div = document.createElement('div');
@@ -332,13 +356,78 @@ function renderProof(event) {
   if (!v) {
     div.className = 'proof-card invalid';
     div.textContent = `${event.sellerId}: no deal reached`;
-  } else {
-    div.className = `proof-card ${v.valid ? 'valid' : 'invalid'}`;
-    div.innerHTML = `<strong>${event.sellerId}</strong> \u2014 ${v.valid ? 'VALID' : 'INVALID'}<br>
-      Price ${event.agreedPrice} \u00b7 Quality ${event.agreedQuality}<br>
-      ${v.valid ? `Proof ${v.proofRef}` : `Reason: ${v.reason}`}`;
+    midnightResults.appendChild(div);
+    return;
   }
+
+  // Real Midnight result carries these fields. Older mock shape only had
+  // { valid, reason, proofRef, txId } — support both so nothing breaks
+  // if the mock is ever used as a fallback.
+  const isRealShape = 'contractAddress' in v || 'fairnessValid' in v;
+
+  div.className = `proof-card mn-panel ${v.valid ? 'valid' : 'invalid'}`;
+
+  if (!v.valid) {
+    div.innerHTML = `
+      <div class="mn-header">\u2717 Midnight verification failed \u2014 ${event.sellerId}</div>
+      <div class="mn-reason">Reason: ${v.reason || 'unspecified'}</div>`;
+    midnightResults.appendChild(div);
+    return;
+  }
+
+  if (isRealShape) {
+    div.innerHTML = `
+      <div class="mn-header">\u2713 Verified on Midnight \u2014 ${event.sellerId}</div>
+      <div class="mn-checks">
+        ${checkRow('Credential', v.credentialValid)}
+        ${checkRow('Fair price', v.fairnessValid)}
+        ${checkRow('Delivery quality', v.deliveryValid)}
+      </div>
+      <div class="mn-hashes">
+        ${hashRow('Contract', v.contractAddress)}
+        ${hashRow('Fairness tx', v.txId)}
+        ${hashRow('Delivery tx', v.deliveryTxId)}
+      </div>`;
+  } else {
+    // legacy mock shape fallback
+    div.innerHTML = `
+      <div class="mn-header">\u2713 ${event.sellerId} \u2014 VALID</div>
+      <div class="mn-reason">Price ${event.agreedPrice} \u00b7 Quality ${event.agreedQuality}</div>
+      ${hashRow('Proof', v.proofRef)}
+      ${hashRow('Tx', v.txId)}`;
+  }
+
   midnightResults.appendChild(div);
+}
+
+/* ---------- Pending state while the real ZK proof generates ---------- */
+
+function setFlowState(state) {
+  if (mnFlow) mnFlow.dataset.state = state;
+}
+
+function showMidnightPending(sellerId) {
+  const div = document.createElement('div');
+  div.className = 'proof-card mn-pending';
+  div.id = `mn-pending-${sellerId}`;
+  div.innerHTML = `
+    <div class="mn-pending-row">
+      <span class="mn-pending-dots"><span></span><span></span><span></span></span>
+      <span class="mn-pending-label">Generating Midnight proof for ${sellerId}\u2026</span>
+    </div>
+    <div class="mn-pending-note">This can take up to a minute or two on testnet.</div>`;
+  midnightResults.appendChild(div);
+}
+
+function updateMidnightPending(sellerId, message) {
+  const pending = document.getElementById(`mn-pending-${sellerId}`);
+  const label = pending?.querySelector('.mn-pending-label');
+  if (label && message) label.textContent = message;
+}
+
+function removeMidnightPending(sellerId) {
+  const el = document.getElementById(`mn-pending-${sellerId}`);
+  if (el) el.remove();
 }
 
 function addDownloadButton() {

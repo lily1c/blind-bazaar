@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
 
@@ -76,11 +76,36 @@
 
   <section class="midnight-block">
     <div class="midnight-icon" aria-hidden="true"></div>
-    <div class="midnight-text">
-      <h3>Midnight verification</h3>
-      <p>Nothing here yet — this is where Person B's Compact contract proves each deal was fair.</p>
+    <div class="midnight-block-body">
+      <div class="midnight-text">
+        <h3>Midnight verification</h3>
+        <p>The advertiser's budget, publisher's floor price, and delivered quality are private witnesses to the Midnight contract — the chain sees a proof and a pass/fail verdict, not the numbers themselves.</p>
+      </div>
+
+      <div class="mn-flow" id="mn-flow" data-state="idle">
+        <div class="mn-flow-node" data-node="app">
+          <div class="mn-flow-icon mn-icon-app"></div>
+          <span class="mn-flow-label">App server</span>
+        </div>
+        <div class="mn-flow-line"></div>
+        <div class="mn-flow-node" data-node="wallet">
+          <div class="mn-flow-icon mn-icon-wallet"></div>
+          <span class="mn-flow-label">Wallet</span>
+        </div>
+        <div class="mn-flow-line"></div>
+        <div class="mn-flow-node" data-node="proof">
+          <div class="mn-flow-icon mn-icon-proof"></div>
+          <span class="mn-flow-label">Proof server</span>
+        </div>
+        <div class="mn-flow-line"></div>
+        <div class="mn-flow-node" data-node="contract">
+          <div class="mn-flow-icon mn-icon-contract"></div>
+          <span class="mn-flow-label">Midnight contract</span>
+        </div>
+      </div>
+
+      <div class="midnight-results" id="midnight-results"></div>
     </div>
-    <div class="midnight-results" id="midnight-results"></div>
   </section>
 
 </div>

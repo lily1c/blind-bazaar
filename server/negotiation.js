@@ -1,6 +1,6 @@
 import { createBuyer } from './agents/buyer.js';
 import { createSeller } from './agents/seller.js';
-import { submitDealForVerification, getCredentialProof } from './midnightClient.js';
+import { submitDealForVerification, getCredentialProof } from './midnightReal.js';
 
 const DEAL_LINE = /DEAL_ACCEPTED\s+price=([\d.]+)\s+quality=([\d.]+)/i;
 const MAX_ROUNDS = 6;
@@ -77,6 +77,8 @@ export async function runNegotiation(config, onEvent = () => {}) {
         },
         proposedDeal: { price: agreedPrice, promisedQuality: agreedQuality },
         credential: { agentId: seller.id, credentialProof: credentials[seller.id] }
+      }, (progress) => {
+        onEvent({ type: 'midnight-progress', sellerId: seller.id, progress });
       });
     }
 
