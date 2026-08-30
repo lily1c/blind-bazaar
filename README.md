@@ -1,67 +1,162 @@
-# Blind Bazaar — Person A (Agents & Frontend, Groq only)
+# Blind Bazaar
 
-## What this is
-An advertiser agent bids blind against two competing publisher agents in a real-time ad auction, powered by Groq (Llama 3.3 70B). Each agent's real CPM ceiling/floor and quality bar stay private — never revealed to the other side or to each other. Each auction's outcome is sent to a mock `submitDealForVerification` function matching the exact interface Person B is building on Midnight — swap that mock out once their contract is ready.
+Blind Bazaar is a privacy-preserving AI ad-inventory auction. An advertiser agent negotiates with one or two publisher agents, then the accepted deal is verified by a real [Midnight](https://midnight.network/) Compact contract using zero-knowledge proofs.
 
-## What's new in this version
-- **Real streaming** — the server sends each chat line the moment it's generated (Server-Sent Events on `/api/negotiate/stream`), so the UI updates live instead of waiting for the whole auction to finish.
-- **Campaign brief input** — optional free-text field at the top; whatever you type gets included in the advertiser agent's system prompt as context, and also becomes the chat name (e.g. "Sneaker Campaign").
-- **Activity tab is now an iMessage-style bubble chat** — shows only extracted values ($ CPM, quality score) per message, not the full sentence, with typing-indicator bubbles while an agent is "thinking." The full verbose transcript still lives in the side panel.
-- **Micropayment on selection** — when a publisher's deal is verified valid, they get a small "+$0.05 earned" badge in the Agents panel and a system bubble announcing it in the chat. This is a cosmetic score for the demo, not a real payment.
-- **Sessions tab** — sits next to Agents in the left panel. Every completed run is saved to the browser's local storage and listed there (name, timestamp, valid/invalid indicator); click one to load its full transcript back into the side panel.
-- **Save-before-restart** — clicking "Launch auction" again after a completed run prompts you to save the previous log as a `.txt` file first. There's also a manual "Download this log" button under the transcript panel.
-- **Hover states** — agent rows, chat bubbles, and proof cards scale up slightly on hover.
+The demo shows a simple idea: participants can prove an agreed CPM is within the advertiser's private ceiling and the publisher's private floor, and that delivered quality meets the promised threshold, without revealing those private limits.
 
-Note: value extraction from agent messages uses simple regex ($ amounts, "quality N" mentions) — if an agent phrases something unusually, the bubble may just show "…" until it says a recognizable number.
+> **Hackathon demo status:** the end-to-end flow works on a local Midnight development network. It is not a mainnet deployment and it does not move real money.
 
-## Setup
+## What the demo does
+
+- Streams a live, Groq-powered negotiation between advertiser and publisher agents.
+- Detects an accepted deal in the agent transcript.
+- Generates a Midnight fairness proof and delivery proof against a deployed Compact contract.
+- Shows real contract and transaction identifiers in the browser after verification succeeds.
+- Lets the viewer download a privacy-safe JSON proof receipt containing only public verification metadata.
+- Stores completed transcript sessions locally in the browser.
+
+```text
+Browser UI
+    │  live Server-Sent Events
+    ▼
+Express app + Groq negotiation agents
+    │  verified deal input
+    ▼
+Midnight.js verifier + local wallet
+    │  ZK proof requests
+    ▼
+Local Midnight node + indexer + proof server (Docker)
+    │
+    ▼
+BBoard Compact contract
+```
+
+## Privacy model
+
+The proof receipt and the UI never include the private witness values:
+
+- advertiser maximum CPM
+- publisher CPM floor
+- publisher's actual delivery quality
+- wallet seeds, recovery phrases, or private state
+
+The browser displays the negotiated offer because the agents state it publicly in the transcript. The contract proves only the pass/fail conditions. The downloaded receipt contains the contract address, two transaction IDs, verification verdicts, publisher ID, and timestamp—nothing else.
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 22 or newer
+- Docker Desktop with at least 4 GB allocated
+- [Compact compiler](https://docs.midnight.network/getting-started/installation/) 0.31.1
+- A free [Groq API key](https://console.groq.com/keys)
+
+### 1. Configure the Groq key
 
 ```bash
-npm install
+cd /path/to/blind-bazaar
 cp .env.example .env
-# then edit .env and add your Groq API key
+```
+
+Set `GROQ_API_KEY` in `.env`. Never commit that file.
+
+### 2. Compile the Compact contract
+
+Both generated binding directories are local build output and are intentionally ignored by Git.
+
+```bash
+cd contract
+npm install
+compact compile src/bboard.compact src/managed/bboard
+
+cd ../blind-bazaar-contract
+npm install
+npm run compile
+```
+
+### 3. Start Midnight and deploy locally
+
+```bash
+cd /path/to/blind-bazaar/blind-bazaar-contract
+docker compose up -d
+docker compose ps
+npm run deploy
+```
+
+All three services must be healthy: `node`, `indexer`, and `proof-server`.
+
+### 4. Start the app
+
+In a second terminal:
+
+```bash
+cd /path/to/blind-bazaar
+npm install
 npm start
 ```
 
-Open http://localhost:3000 and click "Launch auction."
+Open [http://localhost:3000](http://localhost:3000) and click **Launch auction**. A full run normally takes about one minute: agent negotiation, wallet sync, fairness proof, then delivery proof.
 
-Get a free Groq API key at console.groq.com — no credit card required. Free tier is 30 requests/minute, so the loop waits ~2.2 seconds between calls.
+## Midnight contract
 
-## Structure
+The contract source is [`contract/src/bboard.compact`](contract/src/bboard.compact).
 
-```
+| Circuit | Private witnesses | Public result |
+| --- | --- | --- |
+| `verifyCredential` | None currently | Checks that a supplied 32-byte credential value is nonempty. This is a deliberate placeholder, not production identity verification. |
+| `verifyDealFairness` | Advertiser max CPM; publisher floor CPM | Proves the proposed CPM is within both private bounds, updates `lastDealValid`, and increments `dealCount`. |
+| `verifyDelivery` | Publisher actual quality | Proves actual quality meets the promised quality and updates `lastDeliveryValid`. |
+
+Quality ratings shown as decimals, such as `7.8`, are represented in the proof as integer tenths (`78`). Both sides use the same scale, so the comparison is preserved.
+
+## Repository map
+
+```text
+public/                         Browser UI and proof-receipt download
 server/
-  index.js          Express server + API route
-  groq.js            Groq API wrapper (OpenAI-compatible endpoint, Llama 3.3 70B)
-  negotiation.js     Orchestrates buyer vs each seller, blind
-  midnightClient.js  MOCK — matches Person B's real interface exactly
-  agents/
-    buyer.js
-    seller.js
-public/
-  index.html
-  app.js             Renders chat transcript + proof panel
-  styles.css
+  agents/                       Groq advertiser and publisher agents
+  negotiation.js                Streams negotiation and requests verification
+  midnightReal.js               Starts the real Midnight verifier process
+  index.js                      Express server and SSE endpoint
+contract/
+  src/bboard.compact            Compact source of truth
+  src/witnesses.ts              Private witness definitions
+blind-bazaar-contract/
+  src/deploy.ts                 Deploys BBoard to the selected Midnight network
+  src/verify-deal.ts            Generates fairness and delivery proof transactions
+  docker-compose.yml            Local node, indexer, and proof-server
 ```
 
-## The interface with Person B
+Other top-level `bboard-*`, `deploy-app`, `api`, and `my-deploy` folders are retained scaffolds and experiments. They are not required for the Blind Bazaar demo path above.
 
-Two functions, both currently mocked in `server/midnightClient.js`:
+## Commands
 
-```ts
-submitDealForVerification({
-  dealId, buyer: {id, maxBudget, minQuality},
-  seller: {id, costFloor, trueQuality},
-  proposedDeal: {price, promisedQuality},
-  credential: {agentId, credentialProof}
-}) → { dealId, valid, reason, proofRef, txId }
+| Command | Purpose |
+| --- | --- |
+| `npm start` | Start the Express application on port 3000. |
+| `cd blind-bazaar-contract && docker compose up -d` | Start the local Midnight services. |
+| `cd blind-bazaar-contract && npm run compile` | Generate the deployment-side Compact bindings. |
+| `cd blind-bazaar-contract && npm run deploy` | Deploy the contract to the selected network; fresh clones default to local devnet. |
+| `cd blind-bazaar-contract && npm run verify-deal -- --help` | Show the real verifier input format. |
+| `cd blind-bazaar-contract && docker compose down` | Stop the local Midnight services. |
 
-getCredentialProof(agentId) → credentialProofString
-```
+## Important limitations
 
-When Person B's real Midnight.js + Compact contract is ready, replace the bodies of these two functions in `midnightClient.js` — nothing else needs to change.
+- The deployed contract used by this demo is on a **local Midnight development network**. Its address changes with a fresh local chain.
+- The green `$0.05 demo reward` is UI-only. There is no payment or escrow contract and no token transfer to a publisher.
+- `verifyCredential` is intentionally a placeholder until a real credential scheme is chosen.
+- The Groq key remains on the server; do not expose it in browser code, screenshots, or Git history.
+- This app uses Server-Sent Events. Static hosts such as GitHub Pages cannot run it. For a short public demo, use an HTTP tunnel to the running local app; for persistent hosting, deploy the Express app and the three Midnight Docker services to a server with persistent storage.
 
-## Notes
-- Private fields (`maxBudget`, `minQuality`, `costFloor`, `trueQuality`) live only inside each agent's own object and the final verification call — never printed to the transcript or sent to the other agent.
-- `DEAL_LINE` regex looks for `DEAL_ACCEPTED price=<n> quality=<n>` in agent replies to detect a struck deal.
-- If Groq returns a 429, `groq.js` automatically waits 5s and retries once.
+## Public-repository safety checklist
+
+Before pushing or changing repository visibility:
+
+- [ ] Confirm `.env`, `.midnight-state.json`, `.midnight-wallet-state/`, `midnight-level-db/`, and generated bindings are ignored.
+- [ ] Run `git status --short` and ensure no runtime wallet state is staged.
+- [ ] Never add a Groq API key, wallet seed, recovery phrase, or private-state password to Git.
+- [ ] Keep the repository's old Preview wallet retired; do not reuse a wallet whose seed appeared in a public repository.
+
+## License
+
+No license has been selected yet. Add one before inviting external reuse of the code.

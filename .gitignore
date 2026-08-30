@@ -2,3 +2,6 @@ node_modules
 .env
 .env.*
 !.env.example
+
+# Compact-generated bindings; regenerate from contract/src/bboard.compact.
+contract/src/managed/
