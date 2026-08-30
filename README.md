@@ -6,6 +6,12 @@ The demo shows a simple idea: participants can prove an agreed CPM is within the
 
 > **Hackathon demo status:** the end-to-end flow works on a local Midnight development network. It is not a mainnet deployment and it does not move real money.
 
+## Live demo
+
+**Hosted demo:** [https://blindbazaar-demo.duckdns.org](https://blindbazaar-demo.duckdns.org)
+
+The app is hosted on Google Compute Engine and served over HTTPS by Caddy. The URL is available while the demo VM is running. Midnight proof generation happens on a VM-local Midnight development network; its node, indexer, and proof server are not exposed to the public internet.
+
 ## What the demo does
 
 - Streams a live, Groq-powered negotiation between advertiser and publisher agents.
@@ -30,6 +36,18 @@ Local Midnight node + indexer + proof server (Docker)
     ▼
 BBoard Compact contract
 ```
+
+## Hosted system architecture
+
+![Blind Bazaar hosted system architecture](docs/assets/blind-bazaar-systems-architecture.png)
+
+The [full architecture diagram](docs/assets/blind-bazaar-systems-architecture.svg) shows the public HTTPS edge, Google Cloud VM, Groq-powered negotiation flow, private witness boundary, Midnight.js verifier, and VM-local Docker services. See [architecture notes](docs/ARCHITECTURE.md) for component responsibilities and network boundaries.
+
+## Demo screenshots
+
+| Two-publisher AI auction | Midnight proof results |
+| --- | --- |
+| ![Blind Bazaar two-publisher auction UI](docs/assets/auction-1v2.png) | ![Blind Bazaar Midnight proof results and receipt download](docs/assets/midnight-proof-receipts.png) |
 
 ## Privacy model
 
@@ -146,7 +164,7 @@ Other top-level `bboard-*`, `deploy-app`, `api`, and `my-deploy` folders are ret
 - The green `$0.05 demo reward` is UI-only. There is no payment or escrow contract and no token transfer to a publisher.
 - `verifyCredential` is intentionally a placeholder until a real credential scheme is chosen.
 - The Groq key remains on the server; do not expose it in browser code, screenshots, or Git history.
-- This app uses Server-Sent Events. Static hosts such as GitHub Pages cannot run it. For a short public demo, use an HTTP tunnel to the running local app; for persistent hosting, deploy the Express app and the three Midnight Docker services to a server with persistent storage.
+- This app uses Server-Sent Events. Static hosts such as GitHub Pages cannot run it. The hosted demo uses Google Compute Engine, Caddy, and DuckDNS; only HTTPS is public, while the Midnight node, indexer, and proof server remain VM-local.
 
 ## Public-repository safety checklist
 
