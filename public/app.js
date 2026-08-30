@@ -19,7 +19,8 @@ const progressBar = document.getElementById('progress-bar');
 const briefInput = document.getElementById('campaign-brief');
 
 const SESSIONS_KEY = 'blindBazaarSessions';
-const MICROPAYMENT = 0.05;
+// Display-only demo reward. No token-transfer circuit is called yet.
+const DEMO_REWARD = 0.05;
 
 let sellerCount = 1;
 let lastLog = null;
@@ -62,14 +63,18 @@ async function maybeConfirmThenRun() {
   runAuction();
 }
 
-function downloadLog(text) {
-  const blob = new Blob([text], { type: 'text/plain' });
+function downloadFile(text, filename, type) {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `blind-bazaar-log-${Date.now()}.txt`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadLog(text) {
+  downloadFile(text, `blind-bazaar-log-${Date.now()}.txt`, 'text/plain');
 }
 
 function chatNameFromBrief(brief) {
@@ -225,9 +230,9 @@ function handleEvent(event, logLines, buyerId) {
     setFlowState(event.verification?.valid ? 'success' : 'error');
 
     if (event.verification?.valid) {
-      earnedTotals[event.sellerId] = (earnedTotals[event.sellerId] || 0) + MICROPAYMENT;
+      earnedTotals[event.sellerId] = (earnedTotals[event.sellerId] || 0) + DEMO_REWARD;
       updateEarnedBadge(event.sellerId);
-      appendSystemBubble(`\u2713 ${event.sellerId} selected \u2014 +$${MICROPAYMENT.toFixed(2)} micropayment`);
+      appendSystemBubble(`\u2713 ${event.sellerId} selected \u2014 +$${DEMO_REWARD.toFixed(2)} demo reward`);
     } else {
       appendSystemBubble(`\u2717 ${event.sellerId}: no deal`);
     }
@@ -330,7 +335,7 @@ function updateEarnedBadge(sellerId) {
   const badge = document.getElementById(`earned-${sellerId}`);
   if (!badge) return;
   badge.style.display = 'inline-block';
-  badge.textContent = `+$${earnedTotals[sellerId].toFixed(2)} earned`;
+  badge.textContent = `+$${earnedTotals[sellerId].toFixed(2)} demo reward`;
 }
 
 /* ---------- Proof cards: real Midnight verification panel ---------- */
@@ -347,6 +352,35 @@ function checkRow(label, ok) {
 function hashRow(label, hash) {
   if (!hash) return '';
   return `<div class="mn-hash-row"><span>${label}</span><code class="mn-hash" title="${hash}">${truncateHash(hash)}</code></div>`;
+}
+
+function downloadProofReceipt(event) {
+  const v = event.verification;
+  // This deliberately contains only public verification metadata. It never
+  // serializes the buyer budget, publisher floor, actual quality, or witnesses.
+  const receipt = {
+    type: 'blind-bazaar-midnight-proof-receipt',
+    version: 1,
+    issuedAt: new Date().toISOString(),
+    privacy: 'Contains public proof metadata only; private witnesses and deal limits are omitted.',
+    publisherId: event.sellerId,
+    verification: {
+      credentialValid: Boolean(v.credentialValid),
+      fairnessValid: Boolean(v.fairnessValid),
+      deliveryValid: Boolean(v.deliveryValid),
+    },
+    midnight: {
+      network: 'local Midnight development network',
+      contractAddress: v.contractAddress,
+      fairnessTransactionId: v.txId,
+      deliveryTransactionId: v.deliveryTxId,
+    },
+  };
+  downloadFile(
+    `${JSON.stringify(receipt, null, 2)}\n`,
+    `blind-bazaar-midnight-proof-receipt-${Date.now()}.json`,
+    'application/json',
+  );
 }
 
 function renderProof(event) {
@@ -387,7 +421,8 @@ function renderProof(event) {
         ${hashRow('Contract', v.contractAddress)}
         ${hashRow('Fairness tx', v.txId)}
         ${hashRow('Delivery tx', v.deliveryTxId)}
-      </div>`;
+      </div>
+      <button class="download-btn mn-receipt-btn" type="button">Download proof receipt (.json)</button>`;
   } else {
     // legacy mock shape fallback
     div.innerHTML = `
@@ -397,6 +432,9 @@ function renderProof(event) {
       ${hashRow('Tx', v.txId)}`;
   }
 
+  if (isRealShape && v.valid) {
+    div.querySelector('.mn-receipt-btn')?.addEventListener('click', () => downloadProofReceipt(event));
+  }
   midnightResults.appendChild(div);
 }
 
