@@ -43,11 +43,14 @@ function cpmToCents(value: number, field: string): bigint {
   return BigInt(Math.round(value * 100));
 }
 
-function wholeNumber(value: number, field: string): bigint {
-  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
-    throw new Error(`${field} must be a non-negative whole number`);
+function qualityToTenths(value: number, field: string): bigint {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative number`);
   }
-  return BigInt(value);
+  // The product presents ratings such as 7.8. Compact's Uint<64> accepts
+  // integers, so represent ratings in tenths inside the proof (7.8 -> 78).
+  // Both sides are converted identically, preserving the >= comparison.
+  return BigInt(Math.round(value * 10));
 }
 
 function loadInput(): DealInput | null {
@@ -110,8 +113,8 @@ async function main() {
   const maxCPM = cpmToCents(input.buyer.maxBudget, 'buyer.maxBudget');
   const floorCPM = cpmToCents(input.seller.costFloor, 'seller.costFloor');
   const price = cpmToCents(input.proposedDeal.price, 'proposedDeal.price');
-  const promisedQuality = wholeNumber(input.proposedDeal.promisedQuality, 'proposedDeal.promisedQuality');
-  const actualQuality = wholeNumber(input.seller.trueQuality, 'seller.trueQuality');
+  const promisedQuality = qualityToTenths(input.proposedDeal.promisedQuality, 'proposedDeal.promisedQuality');
+  const actualQuality = qualityToTenths(input.seller.trueQuality, 'seller.trueQuality');
   const credentialValid = /^[0-9a-f]{64}$/i.test(input.credential.credentialProof);
 
   progress('wallet', `Connecting Midnight wallet on ${network}…`);
